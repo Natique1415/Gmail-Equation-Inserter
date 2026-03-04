@@ -40,5 +40,7 @@ The equation will appear **inline inside your email**.
 
 Recipients **do not need any extension** to view the equation.
 
+* Note: You can see the extension working in the screenshots inside the `screenshots` folder.
+
 
 
