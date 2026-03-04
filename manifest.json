@@ -11,7 +11,7 @@
     "https://latex.codecogs.com/*"
   ],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -25,14 +25,14 @@
         "https://mail.google.com/*"
       ],
       "js": [
-        "data.js",
-        "validator.js",
-        "inserter.js",
-        "modal.js",
-        "content.js"
+        "scripts/data.js",
+        "scripts/validator.js",
+        "scripts/inserter.js",
+        "scripts/modal.js",
+        "scripts/content.js"
       ],
       "css": [
-        "styles.css"
+        "styles/styles.css"
       ],
       "run_at": "document_idle"
     }
