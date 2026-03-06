@@ -173,7 +173,19 @@ GEQ.openModal = function (composeBody, savedRange) {
   document.addEventListener('keydown', escHandler);
   $('#geq-close').onclick = closeModal;
   $('#geq-cancel').onclick = closeModal;
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  // Close on overlay click ONLY if the mousedown also started on the overlay.
+  // This prevents resize drags (mousedown inside modal → mouseup on overlay)
+  // from being misread as a dismiss intent.
+  let mousedownOnOverlay = false;
+  overlay.addEventListener('mousedown', (e) => {
+    mousedownOnOverlay = e.target === overlay;
+  });
+  document.addEventListener('mouseup', () => {
+    mousedownOnOverlay = false;
+  }, { capture: true });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay && mousedownOnOverlay) closeModal();
+  });
 
   // ── Mode tabs ────────────────────────────────────────────
   $$('.geq-tab').forEach(tab => {
