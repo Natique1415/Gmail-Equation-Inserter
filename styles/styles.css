@@ -440,54 +440,87 @@
 /* ── Visual equation display ─────────────────────────────── */
 #geq-visual-eq-wrap {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   background: #f8f9fa;
   border: 1.5px solid #e8eaed;
-  border-radius: 8px;
-  padding: 8px 10px;
-  min-height: 40px;
+  border-radius: 10px;
+  padding: 12px 14px 10px;
+  min-height: 64px;
+  transition: border-color 0.2s;
 }
 
+#geq-visual-eq-wrap:has(.geq-visual-eq-img) {
+  border-color: #c5d8fc;
+  background: #fafcff;
+}
+
+/* The equation image rendered live */
 #geq-visual-eq-display {
   flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-height: 40px;
   overflow-x: auto;
+}
+
+.geq-visual-eq-img {
+  max-width: 100%;
+  max-height: 60px;
+  object-fit: contain;
+  display: block;
 }
 
 .geq-eq-placeholder {
   font-size: 12px;
   color: #bdc1c6;
   font-style: italic;
+  text-align: center;
 }
 
-.geq-eq-code {
-  font-family: 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
-  font-size: 12px;
-  color: #202124;
-  white-space: pre;
-}
-
-#geq-visual-clear {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #9aa0a6;
+/* ── Undo + Clear buttons row ────────────────────────────── */
+#geq-visual-eq-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  align-self: center;
+  gap: 6px;
+  justify-content: flex-end;
+  border-top: 1px solid #e8eaed;
+  padding-top: 8px;
 }
 
-#geq-visual-clear:hover {
-  background: #fce8e6;
+#geq-visual-undo,
+#geq-visual-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1.5px solid #e8eaed;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'Google Sans', sans-serif;
+  color: #80868b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+#geq-visual-undo:not(:disabled):hover {
+  border-color: #1a73e8;
+  color: #1a73e8;
+  background: #e8f0fe;
+}
+
+#geq-visual-clear:not(:disabled):hover {
+  border-color: #d93025;
   color: #d93025;
+  background: #fce8e6;
+}
+
+#geq-visual-undo:disabled,
+#geq-visual-clear:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ── LaTeX input ─────────────────────────────────────────── */
@@ -600,7 +633,6 @@
 /* ── Preview section ─────────────────────────────────────── */
 #geq-preview-section {
   padding: 16px 20px 0;
-  /* clear separation from the panel above */
   border-top: 1px solid #e8eaed;
   margin-top: 14px;
 }
