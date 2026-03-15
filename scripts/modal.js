@@ -176,6 +176,10 @@ GEQ.openModal = function (composeBody, savedRange) {
   const recentContent = $('#geq-recent-content');
   const undoBtn = $('#geq-visual-undo');
   const clearBtn = $('#geq-visual-clear');
+  const previewSection = $('#geq-preview-section');
+
+  // Visual mode has its own live display — hide the redundant preview section
+  previewSection.style.display = 'none';
 
   // ── Close ────────────────────────────────────────────────
   function closeModal() {
@@ -208,6 +212,9 @@ GEQ.openModal = function (composeBody, savedRange) {
       $('#geq-panel-visual').style.display = name === 'visual' ? '' : 'none';
       $('#geq-panel-latex').style.display = name === 'latex' ? '' : 'none';
       $('#geq-panel-recent').style.display = name === 'recent' ? '' : 'none';
+
+      // Preview section is redundant in visual mode — the equation display IS the preview
+      previewSection.style.display = name === 'visual' ? 'none' : '';
 
       // Sync latex ↔ visual on switch
       if (name === 'latex' && visualLatex) latexInput.value = visualLatex;
