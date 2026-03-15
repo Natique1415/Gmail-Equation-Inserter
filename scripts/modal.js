@@ -8,7 +8,6 @@ GEQ.openModal = function (composeBody, savedRange) {
   const { SYMBOL_GROUPS, STRUCTURES } = GEQ;
   const { escapeAttr, escapeHtml } = GEQ;
 
-  // ── Build HTML ───────────────────────────────────────────
   const overlay = document.createElement('div');
   overlay.id = 'geq-overlay';
   overlay.setAttribute('role', 'dialog');
@@ -58,7 +57,7 @@ GEQ.openModal = function (composeBody, savedRange) {
         <div id="geq-slot-editor" style="display:none">
           <div id="geq-slot-header">
             <span id="geq-slot-title"></span>
-            <button id="geq-slot-close" title="Cancel">×</button>
+            <button id="geq-slot-close" title="Cancel">x</button>
           </div>
           <div id="geq-slot-fields"></div>
           <div id="geq-slot-preview-wrap">
@@ -83,11 +82,10 @@ GEQ.openModal = function (composeBody, savedRange) {
             </div>`).join('')}
         </div>
 
-        <!-- YOUR EQUATION — rendered preview, no raw LaTeX visible -->
         <div class="geq-section-label" style="margin-top:14px">Your equation</div>
         <div id="geq-visual-eq-wrap">
           <div id="geq-visual-eq-display">
-            <span class="geq-eq-placeholder">Click structures &amp; symbols above to build your equation…</span>
+            <span class="geq-eq-placeholder">Click structures &amp; symbols above to build your equation...</span>
           </div>
           <div id="geq-visual-eq-actions">
             <button id="geq-visual-undo" title="Undo last piece" disabled>
@@ -118,24 +116,21 @@ GEQ.openModal = function (composeBody, savedRange) {
 
       <!-- RECENT PANEL -->
       <div id="geq-panel-recent" class="geq-panel" style="display:none">
-        <div id="geq-recent-content">
-          <!-- populated dynamically when tab is opened -->
-        </div>
+        <div id="geq-recent-content"></div>
       </div>
 
-      <!-- PREVIEW -->
+      <!-- PREVIEW — shown on LaTeX + Recent tabs only -->
       <div id="geq-preview-section">
         <div class="geq-section-label">Preview</div>
         <div id="geq-preview">
           <div id="geq-preview-inner">
-            <span id="geq-preview-hint">Build or type an equation above…</span>
+            <span id="geq-preview-hint">Build or type an equation above...</span>
             <img id="geq-preview-img" alt="equation preview" style="display:none" />
             <div id="geq-preview-error" style="display:none"></div>
           </div>
         </div>
       </div>
 
-      <!-- INSERT ERROR BANNER -->
       <div id="geq-insert-error" style="display:none" role="alert"></div>
 
       <div id="geq-bottom-row">
@@ -156,7 +151,7 @@ GEQ.openModal = function (composeBody, savedRange) {
   // ── State ────────────────────────────────────────────────
   let activeTab = 'visual';
   let visualLatex = '';
-  let visualParts = [];   // each piece added — enables undo
+  let visualParts = [];
   let currentSize = 22;
   let previewTimer = null;
   let slotDebounce = null;
@@ -177,13 +172,52 @@ GEQ.openModal = function (composeBody, savedRange) {
   const undoBtn = $('#geq-visual-undo');
   const clearBtn = $('#geq-visual-clear');
   const previewSection = $('#geq-preview-section');
+  const modal = $('#geq-modal');
 
-  // Visual mode has its own live display — hide the redundant preview section
+  // Visual tab is default — preview section not needed here
   previewSection.style.display = 'none';
+
+  // ── Storage helper ────────────────────────────────────────
+  // Mirrors the one in inserter.js — needed here for size persistence
+  function storageAvailable() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.runtime.id;
+    } catch (_) { return false; }
+  }
+
+  // ── Persist modal size across opens ──────────────────────
+  const MODAL_SIZE_KEY = 'geq_modal_size';
+
+  // Restore saved dimensions immediately on open
+  if (storageAvailable()) {
+    chrome.storage.local.get({ [MODAL_SIZE_KEY]: null }, (data) => {
+      if (chrome.runtime.lastError || !data[MODAL_SIZE_KEY]) return;
+      const { width, height } = data[MODAL_SIZE_KEY];
+      if (width) modal.style.width = width + 'px';
+      if (height) modal.style.height = height + 'px';
+    });
+  }
+
+  // Watch for user resize and save debounced
+  let resizeSaveTimer = null;
+  const resizeObserver = new ResizeObserver(() => {
+    clearTimeout(resizeSaveTimer);
+    resizeSaveTimer = setTimeout(() => {
+      if (!storageAvailable()) return;
+      chrome.storage.local.set({
+        [MODAL_SIZE_KEY]: {
+          width: Math.round(modal.offsetWidth),
+          height: Math.round(modal.offsetHeight),
+        }
+      });
+    }, 400);
+  });
+  resizeObserver.observe(modal);
 
   // ── Close ────────────────────────────────────────────────
   function closeModal() {
     document.removeEventListener('keydown', escHandler);
+    resizeObserver.disconnect();
     overlay.remove();
   }
   const escHandler = (e) => { if (e.key === 'Escape') closeModal(); };
@@ -191,15 +225,9 @@ GEQ.openModal = function (composeBody, savedRange) {
   $('#geq-close').onclick = closeModal;
   $('#geq-cancel').onclick = closeModal;
   let mousedownOnOverlay = false;
-  overlay.addEventListener('mousedown', (e) => {
-    mousedownOnOverlay = e.target === overlay;
-  });
-  document.addEventListener('mouseup', () => {
-    mousedownOnOverlay = false;
-  }, { capture: true });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay && mousedownOnOverlay) closeModal();
-  });
+  overlay.addEventListener('mousedown', (e) => { mousedownOnOverlay = e.target === overlay; });
+  document.addEventListener('mouseup', () => { mousedownOnOverlay = false; }, { capture: true });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay && mousedownOnOverlay) closeModal(); });
 
   // ── Mode tabs ────────────────────────────────────────────
   $$('.geq-tab').forEach(tab => {
@@ -213,26 +241,22 @@ GEQ.openModal = function (composeBody, savedRange) {
       $('#geq-panel-latex').style.display = name === 'latex' ? '' : 'none';
       $('#geq-panel-recent').style.display = name === 'recent' ? '' : 'none';
 
-      // Preview section is redundant in visual mode — the equation display IS the preview
+      // Preview only needed on LaTeX and Recent tabs
       previewSection.style.display = name === 'visual' ? 'none' : '';
 
-      // Sync latex ↔ visual on switch
+      // Sync latex <-> visual on switch
       if (name === 'latex' && visualLatex) latexInput.value = visualLatex;
       if (name === 'visual' && latexInput.value.trim()) {
-        // Coming back from LaTeX tab — treat the whole LaTeX input as one part
         const incoming = latexInput.value.trim();
         if (incoming !== visualLatex) {
           visualParts = [incoming];
           visualLatex = incoming;
           renderEqDisplay();
+          updateUndoButtons();
         }
       }
 
-      // Populate recent panel fresh every time the tab is opened
-      if (name === 'recent') {
-        renderRecentPanel();
-        return;
-      }
+      if (name === 'recent') { renderRecentPanel(); return; }
 
       clearInsertError();
       schedulePreview();
@@ -247,21 +271,18 @@ GEQ.openModal = function (composeBody, savedRange) {
         recentContent.innerHTML = `
           <div class="geq-recent-empty">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f5c6c4" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 8v4M12 16h.01"/>
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
             </svg>
             <p>Storage permission missing.</p>
             <p>Add <code style="font-size:11px;background:#f1f3f4;padding:1px 5px;border-radius:3px">"storage"</code> to <code style="font-size:11px;background:#f1f3f4;padding:1px 5px;border-radius:3px">permissions</code> in manifest.json, then reload the extension.</p>
           </div>`;
         return;
       }
-
       if (!history.length) {
         recentContent.innerHTML = `
           <div class="geq-recent-empty">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dadce0" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
             <p>No recent equations yet.</p>
             <p>Equations you insert will appear here.</p>
@@ -276,7 +297,7 @@ GEQ.openModal = function (composeBody, savedRange) {
         </div>
         <div class="geq-recent-list">
           ${history.map((latex, i) => {
-        const display = latex.length > 52 ? latex.slice(0, 52) + '…' : latex;
+        const display = latex.length > 52 ? latex.slice(0, 52) + '...' : latex;
         return `
               <button class="geq-recent-item" data-latex="${escapeAttr(latex)}" data-idx="${i}">
                 <div class="geq-recent-preview">
@@ -291,22 +312,19 @@ GEQ.openModal = function (composeBody, savedRange) {
         </div>`;
 
       $('#geq-recent-clear').addEventListener('click', () => {
-        if (typeof chrome !== "undefined" && chrome.storage) {
-          chrome.storage.local.set({ geq_history: [] });
-        }
+        if (typeof chrome !== 'undefined' && chrome.storage) chrome.storage.local.set({ geq_history: [] });
         renderRecentPanel();
       });
 
       recentContent.querySelectorAll('.geq-recent-item').forEach(btn => {
         btn.addEventListener('click', () => {
           const latex = btn.dataset.latex;
-
           activeTab = 'latex';
           $$('.geq-tab').forEach(t => t.classList.toggle('geq-tab-active', t.dataset.tab === 'latex'));
           $('#geq-panel-visual').style.display = 'none';
           $('#geq-panel-latex').style.display = '';
           $('#geq-panel-recent').style.display = 'none';
-
+          previewSection.style.display = '';
           latexInput.value = latex;
           showValidation(latex);
           clearInsertError();
@@ -317,7 +335,7 @@ GEQ.openModal = function (composeBody, savedRange) {
     });
   }
 
-  // ── Structure clicks → slot editor ──────────────────────
+  // ── Structure clicks -> slot editor ──────────────────────
   $$('.geq-struct-btn').forEach(btn => {
     btn.addEventListener('click', () => openSlotEditor(STRUCTURES[parseInt(btn.dataset.idx, 10)]));
   });
@@ -344,33 +362,22 @@ GEQ.openModal = function (composeBody, savedRange) {
     const allInputs = Array.from(fields.querySelectorAll('.geq-slot-input'));
 
     allInputs.forEach((inp, idx) => {
-      // Live preview on type
       inp.addEventListener('input', () => {
         clearTimeout(slotDebounce);
         slotDebounce = setTimeout(updateSlotPreview, 300);
       });
-
-      // Tab navigates between fields; Enter confirms
       inp.addEventListener('keydown', (e) => {
         if (e.key === 'Tab' && !e.shiftKey) {
           e.preventDefault();
           const next = allInputs[idx + 1];
-          if (next) {
-            next.focus();
-          } else {
-            // Last field — move focus to the Add button
-            $('#geq-slot-insert').focus();
-          }
+          if (next) next.focus(); else $('#geq-slot-insert').focus();
         }
         if (e.key === 'Tab' && e.shiftKey) {
           e.preventDefault();
           const prev = allInputs[idx - 1];
           if (prev) prev.focus();
         }
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          $('#geq-slot-insert').click();
-        }
+        if (e.key === 'Enter') { e.preventDefault(); $('#geq-slot-insert').click(); }
       });
     });
 
@@ -378,8 +385,7 @@ GEQ.openModal = function (composeBody, savedRange) {
     setTimeout(() => $(`#geq-slot-0`)?.focus(), 50);
 
     $('#geq-slot-insert').onclick = () => {
-      const latex = struct.build(getValues());
-      addVisualPart(latex);
+      addVisualPart(struct.build(getValues()));
       closeSlotEditor();
     };
   }
@@ -401,12 +407,10 @@ GEQ.openModal = function (composeBody, savedRange) {
 
   // ── Symbol clicks ────────────────────────────────────────
   $$('.geq-sym').forEach(btn => {
-    btn.addEventListener('click', () => {
-      addVisualPart(btn.dataset.latex);
-    });
+    btn.addEventListener('click', () => addVisualPart(btn.dataset.latex));
   });
 
-  // ── Add a piece to the visual equation ──────────────────
+  // ── Add a piece to the visual equation ───────────────────
   function addVisualPart(latex) {
     visualParts.push(latex);
     visualLatex = visualParts.join(' ');
@@ -415,7 +419,7 @@ GEQ.openModal = function (composeBody, savedRange) {
     updateUndoButtons();
   }
 
-  // ── Undo last piece ──────────────────────────────────────
+  // ── Undo last piece ───────────────────────────────────────
   undoBtn.addEventListener('click', () => {
     if (!visualParts.length) return;
     visualParts.pop();
@@ -425,7 +429,7 @@ GEQ.openModal = function (composeBody, savedRange) {
     updateUndoButtons();
   });
 
-  // ── Clear all ────────────────────────────────────────────
+  // ── Clear all ─────────────────────────────────────────────
   clearBtn.addEventListener('click', () => {
     visualParts = [];
     visualLatex = '';
@@ -440,21 +444,21 @@ GEQ.openModal = function (composeBody, savedRange) {
     clearBtn.disabled = !hasContent;
   }
 
-  // ── LaTeX input ──────────────────────────────────────────
+  // ── LaTeX input ───────────────────────────────────────────
   latexInput.addEventListener('input', () => {
     clearInsertError();
     showValidation(latexInput.value.trim());
     schedulePreview();
   });
 
-  // ── Size slider ──────────────────────────────────────────
+  // ── Size slider ───────────────────────────────────────────
   $('#geq-size').addEventListener('input', (e) => {
     currentSize = parseInt(e.target.value, 10);
     $('#geq-size-val').textContent = currentSize + 'px';
     if (previewImg.style.display !== 'none') previewImg.style.height = currentSize + 'px';
   });
 
-  // ── Insert ───────────────────────────────────────────────
+  // ── Insert ────────────────────────────────────────────────
   insertBtn.addEventListener('click', async () => {
     const latex = getLatex();
     if (!latex) return;
@@ -463,10 +467,9 @@ GEQ.openModal = function (composeBody, savedRange) {
     insertBtn.disabled = true;
     insertBtn.innerHTML = `
       <svg style="animation:geq-spin 0.7s linear infinite;vertical-align:middle;margin-right:5px"
-           width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2.5">
+           width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-      </svg>Inserting…`;
+      </svg>Inserting...`;
 
     document.removeEventListener('keydown', escHandler);
 
@@ -481,23 +484,22 @@ GEQ.openModal = function (composeBody, savedRange) {
     }
   });
 
-  // ── Helpers ──────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────
   function getLatex() {
     return activeTab === 'latex' ? latexInput.value.trim() : visualLatex.trim();
   }
 
-  // Renders the equation-so-far as a live SVG image — no raw LaTeX shown
   function renderEqDisplay() {
     if (!visualLatex.trim()) {
-      eqDisplay.innerHTML = `<span class="geq-eq-placeholder">Click structures &amp; symbols above to build your equation…</span>`;
+      eqDisplay.innerHTML = `<span class="geq-eq-placeholder">Click structures &amp; symbols above to build your equation...</span>`;
       return;
     }
-    // Show a rendered image instead of code
+    // Show rendered image — user never sees raw LaTeX
     eqDisplay.innerHTML = `<img class="geq-visual-eq-img" src="${GEQ.buildSvgUrl(visualLatex)}" alt="equation" />`;
   }
 
   function showInsertError(msg) {
-    insertError.textContent = '⚠ ' + msg;
+    insertError.textContent = 'Warning: ' + msg;
     insertError.style.display = 'block';
     insertError.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
@@ -512,11 +514,11 @@ GEQ.openModal = function (composeBody, savedRange) {
     const result = GEQ.validate(latex);
     if (!result.valid) {
       validationEl.className = 'geq-validation-error';
-      validationEl.textContent = '⚠ ' + result.error;
+      validationEl.textContent = 'Warning: ' + result.error;
       validationEl.style.display = 'block';
     } else if (result.warnings.length > 0) {
       validationEl.className = 'geq-validation-warning';
-      validationEl.textContent = '⚡ ' + result.warnings[0];
+      validationEl.textContent = 'Note: ' + result.warnings[0];
       validationEl.style.display = 'block';
     } else {
       validationEl.style.display = 'none';
@@ -545,10 +547,16 @@ GEQ.openModal = function (composeBody, savedRange) {
       if (!result.valid) {
         previewImg.style.display = 'none';
         previewErr.style.display = 'block';
-        previewErr.textContent = '⚠ ' + result.error;
+        previewErr.textContent = 'Warning: ' + result.error;
         insertBtn.disabled = true;
         return;
       }
+    }
+
+    // Visual tab — enable insert as soon as there's any content
+    if (activeTab === 'visual') {
+      insertBtn.disabled = false;
+      return;
     }
 
     const url = GEQ.buildSvgUrl(latex);
@@ -561,7 +569,7 @@ GEQ.openModal = function (composeBody, savedRange) {
     previewImg.onerror = () => {
       previewImg.style.display = 'none';
       previewErr.style.display = 'block';
-      previewErr.textContent = '⚠ Could not render — check your LaTeX syntax.';
+      previewErr.textContent = 'Warning: Could not render — check your LaTeX syntax.';
       insertBtn.disabled = true;
     };
     previewImg.src = url;
